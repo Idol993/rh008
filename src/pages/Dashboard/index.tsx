@@ -124,9 +124,9 @@ function BigNumber({ value, unit, label, color = 'text-white', icon, onClick }: 
   );
 }
 
-function ProcessDetailModal({ title, onClose }: { title: string; onClose: () => void }) {
+function ProcessDetailModal({ title, filterType, onClose }: { title: string; filterType?: string; onClose: () => void }) {
   const getProcessDetails = useMESStore((state) => state.getProcessDetails);
-  const processDetails = getProcessDetails();
+  const processDetails = getProcessDetails(undefined, filterType);
 
   const statusColors: Record<string, string> = {
     pending: 'bg-dark-500 text-dark-200',
@@ -438,8 +438,14 @@ export default function Dashboard() {
   const modalTitles: Record<string, string> = {
     oee: '设备综合效率（OEE）- 工序明细',
     achievement: '产量达成率 - 工序明细',
-    quality: '产品合格率与不良率 - 工序明细',
+    quality: '产品合格率与不良率（含异常工序） - 工序明细',
     workorders: '今日生产工单 - 工序明细',
+  };
+  const modalFilterTypes: Record<string, string> = {
+    oee: '',
+    achievement: '',
+    quality: 'defect',
+    workorders: 'today',
   };
 
   return (
@@ -718,6 +724,7 @@ export default function Dashboard() {
       {showDetailModal && (
         <ProcessDetailModal
           title={modalTitles[showDetailModal] || '工序明细'}
+          filterType={modalFilterTypes[showDetailModal] || undefined}
           onClose={() => setShowDetailModal(null)}
         />
       )}

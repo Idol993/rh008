@@ -73,8 +73,10 @@ interface MESState {
   pauseWorkOrder: (workOrderId: string) => void;
   addCompletedQty: (workOrderId: string, qty: number, isGood: boolean) => void;
   generateWorkOrders: (orderId: string) => WorkOrder[];
+  scheduleAllPendingOrders: () => WorkOrder[];
+  findEquipmentFreeSlot: (equipmentId: string, hours: number, earliestStart?: number) => { start: number; end: number };
   getEquipmentLoad: (equipmentId: string, date: Date) => number;
-  getProcessDetails: (workOrderId?: string) => ProcessDetail[];
+  getProcessDetails: (workOrderId?: string, filterType?: string) => ProcessDetail[];
 
   getEquipmentData: (equipmentId: string) => EquipmentData[];
   updateEquipmentData: (equipmentId: string, data: EquipmentData) => void;
@@ -157,25 +159,69 @@ export const useMESStore = create<MESState>((set, get) => ({
     return getBOMByProduct(productId, quantity);
   },
 
+  findEquipmentFreeSlot: (equipmentId, hours, earliestStart) => {
+    const state = get();
+    const now = Date.now();
+    const minStart = earliestStart || now;
+
+    const eqWorkOrders = state.workOrders
+      .filter(wo => wo.equipmentId === equipmentId)
+      .map(wo => ({
+        start: new Date(wo.planStartTime).getTime(),
+        end: new Date(wo.planEndTime).getTime(),
+      }))
+      .sort((a, b) => a.start - b.start);
+
+    const workMinutes = hours * 60 * 60 * 1000;
+    let candidateStart = minStart;
+
+    for (let i = 0; i < eqWorkOrders.length; i++) {
+      const busy = eqWorkOrders[i];
+      const candidateEnd = candidateStart + workMinutes;
+      if (candidateEnd <= busy.start) {
+        break;
+      }
+      if (candidateStart < busy.end) {
+        candidateStart = busy.end;
+      }
+    }
+
+    return {
+      start: candidateStart,
+      end: candidateStart + workMinutes,
+    };
+  },
+
   getEquipmentLoad: (equipmentId, date) => {
     const workOrders = get().workOrders.filter(wo => wo.equipmentId === equipmentId);
     const dateStr = date.toISOString().split('T')[0];
+    const dayStart = new Date(dateStr).getTime();
+    const dayEnd = dayStart + 24 * 3600 * 1000;
     let totalHours = 0;
     workOrders.forEach(wo => {
-      if (wo.planStartTime.startsWith(dateStr) || wo.planEndTime.startsWith(dateStr)) {
-        const start = new Date(wo.planStartTime).getTime();
-        const end = new Date(wo.planEndTime).getTime();
-        totalHours += Math.max(0, (end - start) / (1000 * 3600));
+      const start = Math.max(dayStart, new Date(wo.planStartTime).getTime());
+      const end = Math.min(dayEnd, new Date(wo.planEndTime).getTime());
+      if (end > start) {
+        totalHours += (end - start) / (1000 * 3600);
       }
     });
     return Math.min(100, (totalHours / 24) * 100);
   },
 
-  getProcessDetails: (workOrderId) => {
-    const workOrders = workOrderId
+  getProcessDetails: (workOrderId, filterType) => {
+    let workOrders = workOrderId
       ? get().workOrders.filter(wo => wo.id === workOrderId)
-      : get().workOrders;
-    
+      : [...get().workOrders];
+
+    if (filterType === 'today') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      workOrders = workOrders.filter(wo =>
+        (wo.planStartTime && wo.planStartTime.startsWith(todayStr)) ||
+        (wo.startTime && wo.startTime.startsWith(todayStr)) ||
+        (wo.endTime && wo.endTime.startsWith(todayStr))
+      );
+    }
+
     const processNameMap: Record<string, string> = {
       '数控车床': '数控加工',
       '铣床': '铣削加工',
@@ -184,7 +230,7 @@ export const useMESStore = create<MESState>((set, get) => ({
       '组装线': '组装工序',
     };
 
-    const details: ProcessDetail[] = workOrders.map((wo, idx) => {
+    let details: ProcessDetail[] = workOrders.map((wo, idx) => {
       const alerts = get().alerts.filter(a => a.relatedId === wo.id);
       return {
         id: `proc${wo.id}-${idx}`,
@@ -204,6 +250,11 @@ export const useMESStore = create<MESState>((set, get) => ({
         abnormalRecords: alerts.map(a => `${a.timestamp.slice(11, 16)} ${a.title}`),
       };
     });
+
+    if (filterType === 'quality' || filterType === 'defect') {
+      details = details.filter(p => p.badQty > 0 || (p.abnormalRecords && p.abnormalRecords.length > 0));
+      details.sort((a, b) => (b.badQty + (b.abnormalRecords?.length || 0)) - (a.badQty + (a.abnormalRecords?.length || 0)));
+    }
 
     return details;
   },
@@ -265,48 +316,53 @@ export const useMESStore = create<MESState>((set, get) => ({
     const deliveryTime = new Date(order.deliveryDate).getTime();
     const now = new Date();
     const daysUntilDelivery = Math.max(1, Math.ceil((deliveryTime - now.getTime()) / (24 * 3600 * 1000)));
+    const isUrgent = daysUntilDelivery <= 3;
 
     const availableEquipments = state.equipments.filter(e => e.status !== 'fault' && e.status !== 'maintenance');
 
     const processSteps = [
-      { eqType: '数控车床', eqPrefix: '数控车', processName: '数控加工', durationHours: 4 },
-      { eqType: '铣床', eqPrefix: '铣', processName: '铣削加工', durationHours: 3 },
-      { eqType: '焊接机器人', eqPrefix: '焊接', processName: '焊接工序', durationHours: 3 },
-      { eqType: '喷涂设备', eqPrefix: '喷涂', processName: '喷涂工序', durationHours: 2 },
-      { eqType: '组装线', eqPrefix: '组装', processName: '组装工序', durationHours: 4 },
+      { eqType: '数控车床', processName: '数控加工', durationHours: 4 },
+      { eqType: '铣床', processName: '铣削加工', durationHours: 3 },
+      { eqType: '焊接机器人', processName: '焊接工序', durationHours: 3 },
+      { eqType: '喷涂设备', processName: '喷涂工序', durationHours: 2 },
+      { eqType: '组装线', processName: '组装工序', durationHours: 4 },
     ];
 
     const newWorkOrders: WorkOrder[] = [];
-    let currentEndTime = now.getTime();
+    let prevStepEndTime = now.getTime();
 
     processSteps.forEach((step, idx) => {
       const candidates = availableEquipments.filter(e => e.type === step.eqType);
       if (candidates.length === 0) return;
 
-      const selectedEq = candidates.reduce((best, eq) => {
-        const loadBest = state.getEquipmentLoad(best.id, now);
-        const loadEq = state.getEquipmentLoad(eq.id, now);
-        return loadEq < loadBest ? eq : best;
-      });
-
-      const estimatedHours = step.durationHours * (order.quantity / 20);
+      const estimatedHours = step.durationHours * Math.max(1, (order.quantity / 20));
       const actualHours = Math.max(2, Math.min(8, estimatedHours));
 
-      const stepStart = new Date(currentEndTime + idx * 3600 * 1000);
-      const stepEnd = new Date(stepStart.getTime() + actualHours * 3600 * 1000);
-      currentEndTime = stepEnd.getTime();
+      const candidateSlots = candidates.map(eq => {
+        const slot = state.findEquipmentFreeSlot(eq.id, actualHours, prevStepEndTime);
+        const load = state.getEquipmentLoad(eq.id, new Date(slot.start));
+        return { eq, slot, load };
+      });
 
-      const isUrgent = daysUntilDelivery <= 3;
+      candidateSlots.sort((a, b) => {
+        if (a.slot.start !== b.slot.start) return a.slot.start - b.slot.start;
+        return a.load - b.load;
+      });
+
+      const best = candidateSlots[0];
+      const stepStart = new Date(best.slot.start);
+      const stepEnd = new Date(best.slot.end);
+      prevStepEndTime = stepEnd.getTime();
 
       newWorkOrders.push({
-        id: `wo${Date.now()}-${idx}`,
+        id: `wo${Date.now()}${Math.random().toString(36).slice(2, 6)}-${idx}`,
         workOrderNo: `WO${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
         orderId: order.id,
         orderNo: order.orderNo,
         productName: order.productName,
         productCode: order.productCode,
-        equipmentId: selectedEq.id,
-        equipmentName: selectedEq.name,
+        equipmentId: best.eq.id,
+        equipmentName: best.eq.name,
         planQty: order.quantity,
         completedQty: 0,
         goodQty: 0,
@@ -326,6 +382,21 @@ export const useMESStore = create<MESState>((set, get) => ({
     }));
 
     return newWorkOrders;
+  },
+
+  scheduleAllPendingOrders: () => {
+    const state = get();
+    const pendingOrders = state.orders
+      .filter(o => o.status === 'pending')
+      .sort((a, b) => new Date(a.deliveryDate).getTime() - new Date(b.deliveryDate).getTime());
+
+    const allNew: WorkOrder[] = [];
+    pendingOrders.forEach(o => {
+      const newOnes = get().generateWorkOrders(o.id);
+      allNew.push(...newOnes);
+    });
+
+    return allNew;
   },
 
   getEquipmentData: (equipmentId) => {

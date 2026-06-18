@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useMESStore } from '@/store/useMESStore';
 import { Card, Badge, Button, Select } from '@/components/ui';
 import {
   DollarSign,
   TrendingUp,
   TrendingDown,
-  PieChart,
+  PieChart as PieChartIcon,
   BarChart3,
   FileText,
   Calendar,
@@ -14,7 +14,7 @@ import {
   Package,
   Users,
   Zap,
-  Settings,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import {
   BarChart,
@@ -36,26 +36,9 @@ import {
 
 const COLORS = ['#165DFF', '#00B42A', '#FF7D00', '#722ED1'];
 
-const costBreakdownData = [
-  { name: '材料成本', value: 65, color: '#165DFF' },
-  { name: '人工成本', value: 20, color: '#00B42A' },
-  { name: '能耗成本', value: 10, color: '#FF7D00' },
-  { name: '其他成本', value: 5, color: '#722ED1' },
-];
-
-const monthlyData = Array.from({ length: 6 }, (_, i) => {
-  const month = new Date();
-  month.setMonth(month.getMonth() - 5 + i);
-  return {
-    month: `${month.getMonth() + 1}月`,
-    revenue: 120 + Math.random() * 50,
-    cost: 80 + Math.random() * 30,
-    profit: 40 + Math.random() * 20,
-  };
-});
-
 export default function Cost() {
   const workOrderCosts = useMESStore((state) => state.workOrderCosts);
+  const workOrders = useMESStore((state) => state.workOrders);
   const [selectedMonth, setSelectedMonth] = useState('current');
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<any>(null);
 
@@ -69,6 +52,56 @@ export default function Cost() {
   const totalMaterialCost = workOrderCosts.reduce((sum, c) => sum + c.materialCost, 0);
   const totalLaborCost = workOrderCosts.reduce((sum, c) => sum + c.laborCost, 0);
   const totalEnergyCost = workOrderCosts.reduce((sum, c) => sum + c.energyCost, 0);
+  const totalOtherCost = Math.max(0, totalCost - totalMaterialCost - totalLaborCost - totalEnergyCost);
+
+  const costBreakdownData = useMemo(() => {
+    if (totalCost <= 0) {
+      return [
+        { name: '材料成本', value: 65, color: '#165DFF' },
+        { name: '人工成本', value: 20, color: '#00B42A' },
+        { name: '能耗成本', value: 10, color: '#FF7D00' },
+        { name: '其他成本', value: 5, color: '#722ED1' },
+      ];
+    }
+    return [
+      { name: '材料成本', value: Math.round((totalMaterialCost / totalCost) * 1000) / 10, color: '#165DFF' },
+      { name: '人工成本', value: Math.round((totalLaborCost / totalCost) * 1000) / 10, color: '#00B42A' },
+      { name: '能耗成本', value: Math.round((totalEnergyCost / totalCost) * 1000) / 10, color: '#FF7D00' },
+      { name: '其他成本', value: Math.max(0, Math.round((totalOtherCost / totalCost) * 1000) / 10), color: '#722ED1' },
+    ];
+  }, [totalCost, totalMaterialCost, totalLaborCost, totalEnergyCost, totalOtherCost]);
+
+  const monthlyData = useMemo(() => {
+    const map: Record<string, { revenue: number; cost: number; profit: number }> = {};
+    const now = new Date();
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      map[key] = { revenue: 0, cost: 0, profit: 0 };
+    }
+
+    workOrderCosts.forEach(c => {
+      const wo = workOrders.find(w => w.workOrderNo === c.workOrderNo);
+      const dateStr = wo?.endTime || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const monthKey = dateStr.slice(0, 7);
+      if (map[monthKey] !== undefined) {
+        map[monthKey].revenue += c.revenue;
+        map[monthKey].cost += c.totalCost;
+        map[monthKey].profit += c.profit;
+      }
+    });
+
+    return Object.entries(map).map(([key, v]) => {
+      const [, m] = key.split('-');
+      return {
+        month: `${parseInt(m, 10)}月`,
+        revenue: Math.round(v.revenue / 1000 * 100) / 100,
+        cost: Math.round(v.cost / 1000 * 100) / 100,
+        profit: Math.round(v.profit / 1000 * 100) / 100,
+      };
+    });
+  }, [workOrderCosts, workOrders]);
 
   const stats = [
     {
@@ -95,7 +128,7 @@ export default function Cost() {
     {
       label: '平均利润率',
       value: avgProfitMargin.toFixed(1) + '%',
-      icon: PieChart,
+      icon: PieChartIcon,
       color: 'text-success-500',
       bgColor: 'bg-success-500/10',
       trend: '+2.3%',
@@ -200,7 +233,7 @@ export default function Cost() {
           <Card
             title="成本构成"
             subtitle="各项成本占比分析"
-            icon={<PieChart className="w-5 h-5 text-warning-500" />}
+            icon={<PieChartIcon className="w-5 h-5 text-warning-500" />}
           >
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
@@ -268,7 +301,7 @@ export default function Cost() {
         </div>
         <div className="bg-dark-800/50 border border-dark-600 rounded-xl p-5">
           <div className="flex items-center gap-2 mb-2">
-            <Settings className="w-4 h-4 text-dark-400" />
+            <SettingsIcon className="w-4 h-4 text-dark-400" />
             <span className="text-dark-400 text-sm">其他成本</span>
           </div>
           <p className="text-2xl font-bold font-mono text-white">¥{((totalCost - totalMaterialCost - totalLaborCost - totalEnergyCost) / 1000).toFixed(1)}k</p>

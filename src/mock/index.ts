@@ -191,7 +191,7 @@ export const mockQualityChecks: QualityCheck[] = [
     id: 'qc001', workOrderId: 'wo002', workOrderNo: 'WO20260619002', productName: '输送机A型', totalQty: 8, passQty: 7, failQty: 1, passRate: 87.5,
     checkTime: formatDateTime(new Date(today.getTime() - 2 * 3600 * 1000)), inspector: '质检-李娜',
     defects: [
-      { id: 'd001', qualityCheckId: 'qc001', defectType: 'welding_defect', defectName: '焊接缺陷', quantity: 1, severity: 'major', description: '焊缝有气孔' },
+      { id: 'd001', qualityCheckId: 'qc001', defectType: 'welding_defect', defectName: '焊接缺陷', quantity: 1, severity: 'major', description: '焊缝有气孔', isLocked: true, lockTime: formatDateTime(new Date(today.getTime() - 2 * 3600 * 1000)), workOrderNo: 'WO20260619002' },
     ],
   },
   {
