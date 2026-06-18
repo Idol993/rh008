@@ -134,6 +134,9 @@ export interface DefectRecord {
   severity: 'minor' | 'major' | 'critical';
   description?: string;
   imageUrl?: string;
+  isLocked?: boolean;
+  lockTime?: string;
+  workOrderNo?: string;
 }
 
 export interface Material {
@@ -242,4 +245,22 @@ export interface EquipmentLoad {
   totalHours: number;
   loadRate: number;
   workOrders: { workOrderId: string; workOrderNo: string; startHour: number; endHour: number }[];
+}
+
+export interface ProcessDetail {
+  id: string;
+  workOrderId: string;
+  workOrderNo: string;
+  processName: string;
+  equipmentId: string;
+  equipmentName: string;
+  planQty: number;
+  completedQty: number;
+  goodQty: number;
+  badQty: number;
+  status: string;
+  startTime?: string;
+  endTime?: string;
+  operatorName?: string;
+  abnormalRecords?: string[];
 }

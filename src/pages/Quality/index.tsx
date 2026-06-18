@@ -15,7 +15,11 @@ import {
   Clock,
   User,
   Package,
+  Lock,
+  Unlock,
+  ClipboardList,
 } from 'lucide-react';
+import type { DefectRecord } from '@/types';
 import {
   BarChart,
   Bar,
@@ -53,20 +57,59 @@ function DefectImage({ defectType, imageUrl }: { defectType: string; imageUrl?: 
 }
 
 function QualityDetailModal({ check, onClose }: { check: any; onClose: () => void }) {
+  const workOrders = useMESStore((state) => state.workOrders);
+  const relatedWO = workOrders.find(w => w.id === check.workOrderId || w.workOrderNo === check.workOrderNo);
+  const lockedQty = check.defects?.filter((d: DefectRecord) => d.isLocked).reduce((s: number, d: DefectRecord) => s + d.quantity, 0) || 0;
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
-      <div className="bg-dark-800 border border-dark-600 rounded-2xl w-full max-w-3xl max-h-[80vh] overflow-hidden animate-slide-up">
+      <div className="bg-dark-800 border border-dark-600 rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden animate-slide-up">
         <div className="px-6 py-4 border-b border-dark-600 flex items-center justify-between">
           <div>
             <h2 className="text-white font-bold text-lg">质检详情</h2>
             <p className="text-dark-400 text-sm">{check.workOrderNo} - {check.productName}</p>
           </div>
-          <Badge variant={check.passRate >= 95 ? 'success' : check.passRate >= 90 ? 'warning' : 'danger'}>
-            合格率 {check.passRate.toFixed(1)}%
-          </Badge>
+          <div className="flex items-center gap-2">
+            {lockedQty > 0 && (
+              <Badge variant="danger" size="sm">
+                <Lock className="w-3 h-3 mr-1" />
+                已锁定 {lockedQty}件
+              </Badge>
+            )}
+            <Badge variant={check.passRate >= 95 ? 'success' : check.passRate >= 90 ? 'warning' : 'danger'}>
+              合格率 {check.passRate.toFixed(1)}%
+            </Badge>
+          </div>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[60vh] space-y-6">
+        <div className="p-6 overflow-y-auto max-h-[65vh] space-y-6">
+          {relatedWO && (
+            <div className="bg-industrial-500/10 border border-industrial-500/30 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <ClipboardList className="w-4 h-4 text-industrial-400" />
+                <span className="text-white font-medium">关联生产工单</span>
+              </div>
+              <div className="grid grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-dark-400">工单号</span>
+                  <p className="text-industrial-400 font-mono">{relatedWO.workOrderNo}</p>
+                </div>
+                <div>
+                  <span className="text-dark-400">生产设备</span>
+                  <p className="text-white">{relatedWO.equipmentName}</p>
+                </div>
+                <div>
+                  <span className="text-dark-400">操作工</span>
+                  <p className="text-white">{relatedWO.operatorName || '-'}</p>
+                </div>
+                <div>
+                  <span className="text-dark-400">生产数量</span>
+                  <p className="text-white font-mono">{relatedWO.completedQty}/{relatedWO.planQty}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-4 gap-4">
             <div className="bg-dark-700/50 rounded-xl p-4 text-center">
               <p className="text-dark-400 text-sm mb-1">总检数</p>
@@ -97,9 +140,21 @@ function QualityDetailModal({ check, onClose }: { check: any; onClose: () => voi
             </h3>
             {check.defects && check.defects.length > 0 ? (
               <div className="grid grid-cols-3 gap-4">
-                {check.defects.map((defect: any, idx: number) => (
-                  <div key={defect.id} className="bg-dark-700/30 border border-dark-600 rounded-xl overflow-hidden">
-                    <DefectImage defectType={defect.defectName} />
+                {check.defects.map((defect: DefectRecord, idx: number) => (
+                  <div key={defect.id} className={`rounded-xl overflow-hidden border transition-all ${
+                    defect.isLocked
+                      ? 'bg-danger-500/10 border-danger-500/40'
+                      : 'bg-dark-700/30 border-dark-600'
+                  }`}>
+                    <div className="relative">
+                      <DefectImage defectType={defect.defectName} />
+                      {defect.isLocked && (
+                        <div className="absolute top-2 right-2 bg-danger-500 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <Lock className="w-3 h-3" />
+                          锁定
+                        </div>
+                      )}
+                    </div>
                     <div className="p-3">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-white text-sm font-medium">{defect.defectName}</span>
@@ -114,7 +169,14 @@ function QualityDetailModal({ check, onClose }: { check: any; onClose: () => voi
                         </Badge>
                       </div>
                       <p className="text-dark-400 text-xs mb-2">{defect.description || 'AI自动检测识别'}</p>
-                      <p className="text-danger-500 font-mono text-sm">{defect.quantity} 件</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-danger-500 font-mono text-sm font-bold">{defect.quantity} 件</p>
+                        {defect.lockTime && (
+                          <p className="text-dark-500 text-xs">
+                            锁定: {defect.lockTime.slice(11, 16)}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -132,7 +194,7 @@ function QualityDetailModal({ check, onClose }: { check: any; onClose: () => voi
             <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-1 text-dark-400">
                 <User className="w-4 h-4" />
-                <span>{check.inspector}</span>
+                <span>{check.inspector || 'AI视觉检测'}</span>
               </div>
               <div className="flex items-center gap-1 text-dark-400">
                 <Clock className="w-4 h-4" />
@@ -155,6 +217,7 @@ function QualityDetailModal({ check, onClose }: { check: any; onClose: () => voi
 
 function UnqualifiedProducts() {
   const qualityChecks = useMESStore((state) => state.qualityChecks);
+  const workOrders = useMESStore((state) => state.workOrders);
   const [selectedCheck, setSelectedCheck] = useState<any>(null);
 
   const failChecks = qualityChecks.filter(qc => qc.failQty > 0);
@@ -167,29 +230,75 @@ function UnqualifiedProducts() {
           <p className="text-dark-400 text-sm">暂无不合格品</p>
         </div>
       ) : (
-        failChecks.map((qc) => (
-          <div
-            key={qc.id}
-            className="bg-dark-700/50 border border-danger-500/30 rounded-xl p-4 hover:bg-dark-700 transition-colors cursor-pointer"
-            onClick={() => setSelectedCheck(qc)}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-industrial-400 font-mono text-sm">{qc.workOrderNo}</span>
-              <Badge variant="danger" size="sm">不良 {qc.failQty}件</Badge>
+        failChecks.map((qc) => {
+          const relatedWO = workOrders.find(w => w.id === qc.workOrderId || w.workOrderNo === qc.workOrderNo);
+          const lockedQty = qc.defects.filter(d => d.isLocked).reduce((s, d) => s + d.quantity, 0);
+          const allLocked = qc.failQty > 0 && lockedQty >= qc.failQty;
+
+          return (
+            <div
+              key={qc.id}
+              className={`rounded-xl p-4 hover:bg-dark-700 transition-colors cursor-pointer ${
+                allLocked
+                  ? 'bg-danger-500/10 border border-danger-500/40'
+                  : 'bg-dark-700/50 border border-warning-500/30'
+              }`}
+              onClick={() => setSelectedCheck(qc)}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-industrial-400 font-mono text-sm">{qc.workOrderNo}</span>
+                  {allLocked ? (
+                    <Badge variant="danger" size="sm">
+                      <Lock className="w-3 h-3 mr-1" />
+                      已锁定
+                    </Badge>
+                  ) : (
+                    <Badge variant="warning" size="sm">
+                      <Unlock className="w-3 h-3 mr-1" />
+                      处理中
+                    </Badge>
+                  )}
+                </div>
+                <Badge variant="danger" size="sm">不良 {qc.failQty}件</Badge>
+              </div>
+              <p className="text-white text-sm mb-1">{qc.productName}</p>
+              <div className="space-y-1 mb-2">
+                {qc.defects.filter(d => d.quantity > 0).slice(0, 2).map((defect: DefectRecord) => (
+                  <div key={defect.id} className="flex items-center justify-between text-xs">
+                    <span className="text-dark-300 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-warning-500" />
+                      {defect.defectName}
+                    </span>
+                    <span className="text-danger-500 font-mono">{defect.quantity}件</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-3 text-xs text-dark-400">
+                <span className="flex items-center gap-1">
+                  <ClipboardList className="w-3 h-3" />
+                  {relatedWO?.equipmentName || '未知工位'}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {qc.checkTime.slice(5, 16)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-dark-600/50">
+                <span className="text-dark-400 text-xs">
+                  已锁定 {lockedQty}/{qc.failQty} 件
+                </span>
+                <button className="text-industrial-400 text-xs flex items-center gap-1">
+                  <Eye className="w-3 h-3" />
+                  查看详情
+                </button>
+              </div>
+              {selectedCheck && selectedCheck.id === qc.id && (
+                <QualityDetailModal check={selectedCheck} onClose={() => setSelectedCheck(null)} />
+              )}
             </div>
-            <p className="text-white text-sm">{qc.productName}</p>
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-dark-600/50">
-              <span className="text-dark-400 text-xs">{qc.checkTime}</span>
-              <button className="text-industrial-400 text-xs flex items-center gap-1">
-                <Eye className="w-3 h-3" />
-                查看详情
-              </button>
-            </div>
-            {selectedCheck && selectedCheck.id === qc.id && (
-              <QualityDetailModal check={selectedCheck} onClose={() => setSelectedCheck(null)} />
-            )}
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   );

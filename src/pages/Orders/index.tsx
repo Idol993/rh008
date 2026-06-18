@@ -251,26 +251,44 @@ function OrderDetailModal({ order, onClose }: { order: Order; onClose: () => voi
           </div>
 
           {orderPRs.length > 0 && (
-            <div>
-              <h3 className="text-white font-medium mb-3 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-warning-500" />
-                关联采购申请
-              </h3>
-              <div className="space-y-2">
-                {orderPRs.map((pr) => (
-                  <div key={pr.id} className="bg-dark-700/50 rounded-lg p-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-white text-sm">{pr.prNo}</p>
-                      <p className="text-dark-400 text-xs">{pr.materialName} - {pr.quantity} {pr.unit}</p>
-                    </div>
-                    <Badge
-                      variant={pr.status === 'approved' ? 'success' : pr.status === 'received' ? 'industrial' : 'warning'}
-                      size="sm"
-                    >
-                      {pr.status === 'pending' ? '待审批' : pr.status === 'approved' ? '已批准' : pr.status === 'purchased' ? '已采购' : '已入库'}
-                    </Badge>
-                  </div>
-                ))}
+            <div className="border border-dark-600 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 bg-dark-700/30 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-warning-500" />
+                  <span className="text-white font-medium">关联采购申请</span>
+                  <Badge variant="warning" size="sm">{orderPRs.length} 条</Badge>
+                </div>
+              </div>
+              <div className="p-4">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-dark-400 border-b border-dark-600">
+                      <th className="text-left py-2 font-medium">申请单号</th>
+                      <th className="text-left py-2 font-medium">对应订单</th>
+                      <th className="text-left py-2 font-medium">物料名称</th>
+                      <th className="text-center py-2 font-medium">缺口数量</th>
+                      <th className="text-right py-2 font-medium">审批状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orderPRs.map((pr) => (
+                      <tr key={pr.id} className="border-b border-dark-700/50">
+                        <td className="py-2.5 text-industrial-400 font-mono">{pr.prNo}</td>
+                        <td className="py-2.5 text-dark-300 font-mono text-xs">{pr.orderNo}</td>
+                        <td className="py-2.5 text-white">{pr.materialName}</td>
+                        <td className="py-2.5 text-center text-danger-500 font-mono font-bold">{pr.quantity} {pr.unit}</td>
+                        <td className="py-2.5 text-right">
+                          <Badge
+                            variant={pr.status === 'approved' ? 'success' : pr.status === 'received' ? 'industrial' : pr.status === 'purchased' ? 'info' : 'warning'}
+                            size="sm"
+                          >
+                            {pr.status === 'pending' ? '待审批' : pr.status === 'approved' ? '已批准' : pr.status === 'purchased' ? '已采购' : '已入库'}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -311,7 +329,7 @@ export default function Orders() {
 
   const handleCreateOrder = (data: any) => {
     const orderNo = data.orderNo || `PO${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
-    addOrder({
+    const newOrder = addOrder({
       ...data,
       orderNo,
       status: 'pending',
@@ -322,7 +340,7 @@ export default function Orders() {
       if (item.shortageQty > 0) {
         addPurchaseRequest({
           prNo: `PR${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
-          orderId: '',
+          orderId: newOrder.id,
           orderNo: orderNo,
           materialId: item.materialId,
           materialName: item.materialName,
@@ -336,7 +354,7 @@ export default function Orders() {
           title: `${item.materialName} 库存不足`,
           message: `库存${item.inventoryQty}${item.unit}，订单需求${item.totalQuantity}${item.unit}，缺口${item.shortageQty}${item.unit}`,
           timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
-          relatedId: item.materialId,
+          relatedId: newOrder.id,
         });
       }
     });

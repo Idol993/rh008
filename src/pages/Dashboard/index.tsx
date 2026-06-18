@@ -26,10 +26,17 @@ import {
   TrendingUp,
   Zap,
   Clock,
+  Eye,
+  ChevronRight,
+  AlertCircle,
+  Users,
+  ClipboardList,
+  X,
 } from 'lucide-react';
-import { StatusDot, Badge } from '@/components/ui';
+import { StatusDot, Badge, Button } from '@/components/ui';
+import type { ProcessDetail } from '@/types';
 
-function OEERingChart({ value, label }: { value: number; label: string }) {
+function OEERingChart({ value, label, onClick }: { value: number; label: string; onClick?: () => void }) {
   const percentage = Math.min(100, Math.max(0, value));
   const circumference = 2 * Math.PI * 80;
   const strokeDasharray = `${(percentage / 100) * circumference} ${circumference}`;
@@ -41,7 +48,10 @@ function OEERingChart({ value, label }: { value: number; label: string }) {
   };
 
   return (
-    <div className="flex flex-col items-center">
+    <div
+      className={`flex flex-col items-center cursor-pointer transition-transform hover:scale-105 ${onClick ? 'cursor-pointer' : ''}`}
+      onClick={onClick}
+    >
       <div className="relative w-48 h-48">
         <svg className="w-full h-full -rotate-90" viewBox="0 0 200 200">
           <circle
@@ -70,21 +80,30 @@ function OEERingChart({ value, label }: { value: number; label: string }) {
             {percentage.toFixed(1)}%
           </span>
           <span className="text-dark-400 text-sm mt-1">{label}</span>
+          {onClick && (
+            <span className="text-industrial-400 text-xs mt-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              点击钻取 <ChevronRight className="w-3 h-3" />
+            </span>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function BigNumber({ value, unit, label, color = 'text-white', icon }: {
+function BigNumber({ value, unit, label, color = 'text-white', icon, onClick }: {
   value: string | number;
   unit?: string;
   label: string;
   color?: string;
   icon?: React.ReactNode;
+  onClick?: () => void;
 }) {
   return (
-    <div className="bg-dark-700/60 backdrop-blur-sm border border-dark-600 rounded-xl p-5">
+    <div
+      className={`bg-dark-700/60 backdrop-blur-sm border border-dark-600 rounded-xl p-5 ${onClick ? 'cursor-pointer transition-all hover:border-industrial-500/50 hover:bg-dark-700' : ''}`}
+      onClick={onClick}
+    >
       <div className="flex items-start justify-between mb-2">
         <span className="text-dark-400 text-sm">{label}</span>
         {icon && <span className="text-dark-400">{icon}</span>}
@@ -94,6 +113,150 @@ function BigNumber({ value, unit, label, color = 'text-white', icon }: {
           {value}
         </span>
         {unit && <span className="text-dark-400 text-sm">{unit}</span>}
+      </div>
+      {onClick && (
+        <div className="mt-2 flex items-center gap-1 text-industrial-400 text-xs opacity-70">
+          <Eye className="w-3 h-3" />
+          点击查看明细
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProcessDetailModal({ title, onClose }: { title: string; onClose: () => void }) {
+  const getProcessDetails = useMESStore((state) => state.getProcessDetails);
+  const processDetails = getProcessDetails();
+
+  const statusColors: Record<string, string> = {
+    pending: 'bg-dark-500 text-dark-200',
+    running: 'bg-success-500/20 text-success-500',
+    paused: 'bg-warning-500/20 text-warning-500',
+    completed: 'bg-industrial-500/20 text-industrial-500',
+    abnormal: 'bg-danger-500/20 text-danger-500',
+  };
+
+  const statusLabels: Record<string, string> = {
+    pending: '待开工',
+    running: '进行中',
+    paused: '暂停',
+    completed: '已完成',
+    abnormal: '异常',
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 backdrop-blur-sm">
+      <div className="bg-dark-800 border border-dark-600 rounded-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden animate-slide-up">
+        <div className="px-6 py-4 border-b border-dark-600 flex items-center justify-between">
+          <div>
+            <h2 className="text-white font-bold text-lg flex items-center gap-2">
+              <ClipboardList className="w-5 h-5 text-industrial-400" />
+              {title}
+            </h2>
+            <p className="text-dark-400 text-sm mt-0.5">
+              共 {processDetails.length} 道工序明细，支持查看各工序生产情况
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg bg-dark-700 hover:bg-dark-600 text-dark-300 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 overflow-y-auto max-h-[calc(85vh-80px)]">
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <div className="bg-dark-700/50 rounded-xl p-4">
+              <p className="text-dark-400 text-xs mb-1">总工序数</p>
+              <p className="text-white text-2xl font-bold font-mono">{processDetails.length}</p>
+            </div>
+            <div className="bg-success-500/10 rounded-xl p-4">
+              <p className="text-dark-400 text-xs mb-1">已完成</p>
+              <p className="text-success-500 text-2xl font-bold font-mono">
+                {processDetails.filter(p => p.status === 'completed').length}
+              </p>
+            </div>
+            <div className="bg-industrial-500/10 rounded-xl p-4">
+              <p className="text-dark-400 text-xs mb-1">进行中</p>
+              <p className="text-industrial-400 text-2xl font-bold font-mono">
+                {processDetails.filter(p => p.status === 'running').length}
+              </p>
+            </div>
+            <div className="bg-danger-500/10 rounded-xl p-4">
+              <p className="text-dark-400 text-xs mb-1">异常工序</p>
+              <p className="text-danger-500 text-2xl font-bold font-mono">
+                {processDetails.filter(p => p.status === 'abnormal' || (p.abnormalRecords && p.abnormalRecords.length > 0)).length}
+              </p>
+            </div>
+          </div>
+
+          <div className="border border-dark-600 rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-dark-700/50 border-b border-dark-600">
+                    <th className="text-left py-3 px-4 text-dark-300 font-medium text-sm">工单号</th>
+                    <th className="text-left py-3 px-4 text-dark-300 font-medium text-sm">工序名称</th>
+                    <th className="text-left py-3 px-4 text-dark-300 font-medium text-sm">生产设备</th>
+                    <th className="text-center py-3 px-4 text-dark-300 font-medium text-sm">计划数量</th>
+                    <th className="text-center py-3 px-4 text-dark-300 font-medium text-sm">完成数量</th>
+                    <th className="text-center py-3 px-4 text-dark-300 font-medium text-sm">良品</th>
+                    <th className="text-center py-3 px-4 text-dark-300 font-medium text-sm">不良品</th>
+                    <th className="text-left py-3 px-4 text-dark-300 font-medium text-sm">操作工</th>
+                    <th className="text-center py-3 px-4 text-dark-300 font-medium text-sm">状态</th>
+                    <th className="text-left py-3 px-4 text-dark-300 font-medium text-sm">异常记录</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {processDetails.map((p: ProcessDetail) => (
+                    <tr key={p.id} className="border-b border-dark-700/50 hover:bg-dark-700/30 transition-colors">
+                      <td className="py-3 px-4 text-industrial-400 font-mono text-sm">{p.workOrderNo}</td>
+                      <td className="py-3 px-4 text-white text-sm font-medium">{p.processName}</td>
+                      <td className="py-3 px-4 text-dark-200 text-sm">{p.equipmentName}</td>
+                      <td className="py-3 px-4 text-center text-white font-mono text-sm">{p.planQty}</td>
+                      <td className="py-3 px-4 text-center text-industrial-400 font-mono text-sm font-bold">{p.completedQty}</td>
+                      <td className="py-3 px-4 text-center text-success-500 font-mono text-sm">{p.goodQty}</td>
+                      <td className="py-3 px-4 text-center text-danger-500 font-mono text-sm">{p.badQty}</td>
+                      <td className="py-3 px-4 text-dark-300 text-sm flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        {p.operatorName || '-'}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[p.status] || 'bg-dark-500 text-dark-200'}`}>
+                          {statusLabels[p.status] || p.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 max-w-[180px]">
+                        {p.abnormalRecords && p.abnormalRecords.length > 0 ? (
+                          <div className="space-y-0.5">
+                            {p.abnormalRecords.slice(0, 2).map((r, i) => (
+                              <div key={i} className="text-xs text-warning-500 flex items-center gap-1 truncate">
+                                <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                                {r}
+                              </div>
+                            ))}
+                            {p.abnormalRecords.length > 2 && (
+                              <span className="text-xs text-dark-500">+{p.abnormalRecords.length - 2} 更多</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-dark-500 text-xs">无异常</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="mt-4 flex justify-end">
+            <Button variant="secondary" onClick={onClose}>
+              关闭
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -107,12 +270,18 @@ function EquipmentGrid() {
     const interval = setInterval(() => {
       equipments.forEach((eq) => {
         if (eq.status === 'running') {
-          const newTemp = eq.currentTemperature + (Math.random() - 0.5) * 3;
-          const newSpeed = eq.currentSpeed + (Math.random() - 0.5) * 100;
-          const newPower = eq.currentPower + (Math.random() - 0.5) * 1;
+          const overshootChance = Math.random();
+          let newTemp = eq.currentTemperature + (Math.random() - 0.5) * 3;
+          let newSpeed = eq.currentSpeed + (Math.random() - 0.5) * 100;
+          let newPower = eq.currentPower + (Math.random() - 0.5) * 1;
+
+          if (overshootChance < 0.03) {
+            newTemp = eq.temperatureThreshold.max + 5 + Math.random() * 10;
+          }
+
           updateEquipmentData(eq.id, {
             timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
-            temperature: Math.max(eq.temperatureThreshold.min, Math.min(eq.temperatureThreshold.max, newTemp)),
+            temperature: Math.max(eq.temperatureThreshold.min, newTemp),
             speed: Math.max(0, newSpeed),
             power: Math.max(0, newPower),
           });
@@ -234,6 +403,8 @@ export default function Dashboard() {
   const qualityChecks = useMESStore((state) => state.qualityChecks);
   const orders = useMESStore((state) => state.orders);
 
+  const [showDetailModal, setShowDetailModal] = useState<string | null>(null);
+
   const todayStats = productionStats[productionStats.length - 1];
   const runningWO = workOrders.filter(wo => wo.status === 'running');
   const completedToday = workOrders.filter(wo => wo.status === 'completed' && wo.endTime?.startsWith(new Date().toISOString().split('T')[0]));
@@ -244,6 +415,7 @@ export default function Dashboard() {
   const totalBadQty = workOrders.reduce((sum, wo) => sum + wo.badQty, 0);
   const passRate = totalCompletedQty > 0 ? (totalGoodQty / totalCompletedQty) * 100 : 0;
   const achievementRate = totalPlanQty > 0 ? (totalCompletedQty / totalPlanQty) * 100 : 0;
+  const defectRate = totalCompletedQty > 0 ? (totalBadQty / totalCompletedQty) * 100 : 0;
 
   const defectData = qualityChecks.flatMap(qc => qc.defects).reduce((acc, d) => {
     const existing = acc.find(item => item.name === d.defectName);
@@ -262,6 +434,13 @@ export default function Dashboard() {
     plan: 40 + Math.floor(Math.random() * 15),
     actual: 35 + Math.floor(Math.random() * 18),
   }));
+
+  const modalTitles: Record<string, string> = {
+    oee: '设备综合效率（OEE）- 工序明细',
+    achievement: '产量达成率 - 工序明细',
+    quality: '产品合格率与不良率 - 工序明细',
+    workorders: '今日生产工单 - 工序明细',
+  };
 
   return (
     <div className="space-y-4 -m-6 p-6 min-h-full bg-dark-900">
@@ -286,7 +465,10 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-3 space-y-4">
-          <div className="bg-dark-800/60 backdrop-blur-sm border border-dark-600 rounded-2xl p-6 flex flex-col items-center">
+          <div
+            className="bg-dark-800/60 backdrop-blur-sm border border-dark-600 rounded-2xl p-6 flex flex-col items-center cursor-pointer hover:border-industrial-500/50 transition-all group"
+            onClick={() => setShowDetailModal('oee')}
+          >
             <OEERingChart value={todayStats?.oee || 82.5} label="设备综合效率" />
             <div className="w-full mt-4 grid grid-cols-3 gap-2 text-center">
               <div>
@@ -302,6 +484,10 @@ export default function Dashboard() {
                 <p className="text-white font-mono font-bold">{passRate.toFixed(1)}%</p>
               </div>
             </div>
+            <div className="mt-3 text-xs text-industrial-400 flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+              <Eye className="w-3 h-3" />
+              点击钻取查看各工序OEE
+            </div>
           </div>
 
           <BigNumber
@@ -310,6 +496,7 @@ export default function Dashboard() {
             label="产量达成率"
             color="text-industrial-400"
             icon={<TrendingUp className="w-5 h-5" />}
+            onClick={() => setShowDetailModal('achievement')}
           />
           <BigNumber
             value={passRate.toFixed(1)}
@@ -317,13 +504,15 @@ export default function Dashboard() {
             label="产品合格率"
             color="text-success-500"
             icon={<CheckCircle2 className="w-5 h-5" />}
+            onClick={() => setShowDetailModal('quality')}
           />
           <BigNumber
-            value={((100 - passRate)).toFixed(2)}
+            value={defectRate.toFixed(2)}
             unit="%"
             label="不良品率"
             color={passRate > 95 ? 'text-success-500' : passRate > 90 ? 'text-warning-500' : 'text-danger-500'}
             icon={<XCircle className="w-5 h-5" />}
+            onClick={() => setShowDetailModal('quality')}
           />
         </div>
 
@@ -457,10 +646,20 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="bg-dark-800/60 backdrop-blur-sm border border-dark-600 rounded-2xl p-5">
+      <div
+        className="bg-dark-800/60 backdrop-blur-sm border border-dark-600 rounded-2xl p-5 cursor-pointer hover:border-industrial-500/50 transition-all group"
+        onClick={() => setShowDetailModal('workorders')}
+      >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-white font-medium">今日生产工单</h3>
-          <span className="text-dark-400 text-sm">共 {workOrders.length} 个工单</span>
+          <div className="flex items-center gap-2">
+            <h3 className="text-white font-medium">今日生产工单</h3>
+            <Badge variant="industrial" size="sm">共 {workOrders.length} 个</Badge>
+          </div>
+          <div className="text-industrial-400 text-xs flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+            <Eye className="w-3 h-3" />
+            点击钻取查看工序明细
+            <ChevronRight className="w-3 h-3" />
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -515,6 +714,13 @@ export default function Dashboard() {
           </table>
         </div>
       </div>
+
+      {showDetailModal && (
+        <ProcessDetailModal
+          title={modalTitles[showDetailModal] || '工序明细'}
+          onClose={() => setShowDetailModal(null)}
+        />
+      )}
     </div>
   );
 }
