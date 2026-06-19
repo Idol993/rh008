@@ -207,16 +207,26 @@ interface SelectProps {
   options: { value: string; label: string }[];
   className?: string;
   placeholder?: string;
+  size?: 'sm' | 'md' | 'lg';
 }
 
-export function Select({ label, value, onChange, options, className, placeholder = '请选择' }: SelectProps) {
+export function Select({ label, value, onChange, options, className, placeholder = '请选择', size = 'md' }: SelectProps) {
+  const sizes = {
+    sm: 'px-3 py-1.5 text-xs',
+    md: 'px-4 py-2.5 text-sm',
+    lg: 'px-5 py-3 text-base',
+  };
+
   return (
     <div className={cn('space-y-1.5', className)}>
       {label && <label className="text-sm text-dark-200 font-medium">{label}</label>}
       <select
         value={value}
         onChange={(e) => onChange?.(e.target.value)}
-        className="w-full px-4 py-2.5 bg-dark-700 border border-dark-400 rounded-lg text-white focus:outline-none focus:border-industrial-500 focus:ring-2 focus:ring-industrial-500/20 transition-all appearance-none cursor-pointer"
+        className={cn(
+          'w-full bg-dark-700 border border-dark-400 rounded-lg text-white focus:outline-none focus:border-industrial-500 focus:ring-2 focus:ring-industrial-500/20 transition-all appearance-none cursor-pointer',
+          sizes[size]
+        )}
       >
         <option value="">{placeholder}</option>
         {options.map((opt) => (
@@ -275,9 +285,10 @@ interface StatusDotProps {
   status: 'running' | 'idle' | 'maintenance' | 'fault' | 'pending' | 'completed' | 'abnormal' | string;
   pulse?: boolean;
   size?: 'sm' | 'md' | 'lg';
+  className?: string;
 }
 
-export function StatusDot({ status, pulse = false, size = 'md' }: StatusDotProps) {
+export function StatusDot({ status, pulse = false, size = 'md', className }: StatusDotProps) {
   const statusColors: Record<string, string> = {
     running: 'bg-success-500',
     idle: 'bg-dark-400',
@@ -300,7 +311,8 @@ export function StatusDot({ status, pulse = false, size = 'md' }: StatusDotProps
         'inline-block rounded-full',
         statusColors[status] || 'bg-dark-400',
         sizes[size],
-        pulse && 'animate-pulse'
+        pulse && 'animate-pulse',
+        className
       )}
     />
   );

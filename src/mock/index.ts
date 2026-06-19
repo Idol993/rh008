@@ -243,10 +243,10 @@ export const generateEnergyHourlyData = (equipmentId: string): { hour: number; c
 };
 
 export const mockWorkOrderCosts: WorkOrderCost[] = [
-  { id: 'cost001', workOrderNo: 'WO20260618001', orderNo: 'PO20260618001', productName: '输送机A型', quantity: 5, materialCost: 4520, laborCost: 1280, energyCost: 356, otherCost: 150, totalCost: 6306, unitCost: 1261.2, revenue: 8500, profit: 2194, profitMargin: 25.8 },
-  { id: 'cost002', workOrderNo: 'WO20260617001', orderNo: 'PO20260616001', productName: '货架重型', quantity: 20, materialCost: 12800, laborCost: 3600, energyCost: 890, otherCost: 420, totalCost: 17710, unitCost: 885.5, revenue: 24000, profit: 6290, profitMargin: 26.2 },
-  { id: 'cost003', workOrderNo: 'WO20260616001', orderNo: 'PO20260615001', productName: '工作台不锈钢', quantity: 15, materialCost: 18500, laborCost: 2800, energyCost: 520, otherCost: 280, totalCost: 22100, unitCost: 1473.3, revenue: 30000, profit: 7900, profitMargin: 26.3 },
-  { id: 'cost004', workOrderNo: 'WO20260615001', orderNo: 'PO20260614001', productName: '输送机A型', quantity: 8, materialCost: 7232, laborCost: 2048, energyCost: 568, otherCost: 240, totalCost: 10088, unitCost: 1261.0, revenue: 13600, profit: 3512, profitMargin: 25.8 },
+  { id: 'cost001', workOrderId: 'wo006', workOrderNo: 'WO20260618001', orderId: 'order002', orderNo: 'PO20260618001', productName: '输送机A型', productCode: 'P001', quantity: 5, materialCost: 4520, laborCost: 1280, energyCost: 356, otherCost: 150, totalCost: 6306, unitCost: 1261.2, revenue: 8500, profit: 2194, profitMargin: 25.8, completedMonth: '2026-06', completedDate: '2026-06-18 16:30:00', isCostAbnormal: false },
+  { id: 'cost002', workOrderId: 'wo007', workOrderNo: 'WO20260617001', orderId: 'order003', orderNo: 'PO20260616001', productName: '货架重型', productCode: 'P002', quantity: 20, materialCost: 12800, laborCost: 3600, energyCost: 890, otherCost: 420, totalCost: 17710, unitCost: 885.5, revenue: 24000, profit: 6290, profitMargin: 26.2, completedMonth: '2026-06', completedDate: '2026-06-17 14:20:00', isCostAbnormal: false },
+  { id: 'cost003', workOrderId: 'wo008', workOrderNo: 'WO20260616001', orderId: 'order004', orderNo: 'PO20260615001', productName: '工作台不锈钢', productCode: 'P003', quantity: 15, materialCost: 18500, laborCost: 2800, energyCost: 520, otherCost: 280, totalCost: 22100, unitCost: 1473.3, revenue: 30000, profit: 7900, profitMargin: 26.3, completedMonth: '2026-06', completedDate: '2026-06-16 11:45:00', isCostAbnormal: false },
+  { id: 'cost004', workOrderId: 'wo009', workOrderNo: 'WO20260615001', orderId: 'order005', orderNo: 'PO20260614001', productName: '输送机A型', productCode: 'P001', quantity: 8, materialCost: 7232, laborCost: 2048, energyCost: 568, otherCost: 240, totalCost: 10088, unitCost: 1261.0, revenue: 13600, profit: 3512, profitMargin: 25.8, completedMonth: '2026-06', completedDate: '2026-06-15 09:10:00', isCostAbnormal: false },
 ];
 
 export const mockAlerts: Alert[] = [

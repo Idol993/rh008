@@ -94,11 +94,38 @@ export interface WorkOrder {
   priority: 'high' | 'medium' | 'low';
   scheduleReason?: string;
   processName?: string;
+  riskLevel?: RiskLevel;
+  riskReasons?: string[];
 }
 
-export interface ScheduleResult {
-  workOrder: WorkOrder;
+export type RiskLevel = 'none' | 'low' | 'medium' | 'high' | 'critical';
+
+export interface WorkOrderScheduleDraft {
+  workOrder: Omit<WorkOrder, 'id'>;
   reasons: string[];
+  riskLevel: RiskLevel;
+  riskReasons: string[];
+}
+
+export interface OrderScheduleDraft {
+  orderId: string;
+  orderNo: string;
+  productName: string;
+  deliveryDate: string;
+  riskLevel: RiskLevel;
+  riskReasons: string[];
+  scheduledSteps: WorkOrderScheduleDraft[];
+  unscheduledSteps: { processName: string; eqType: string; reason: string }[];
+  estimatedDeliveryTime: string;
+  onTime: boolean;
+}
+
+export interface ScheduleDraft {
+  orderDrafts: OrderScheduleDraft[];
+  totalScheduled: number;
+  totalUnscheduled: number;
+  highRiskCount: number;
+  generatedAt: string;
 }
 
 export interface UnscheduledStep {
@@ -217,8 +244,11 @@ export interface EnergyRecord {
 export interface WorkOrderCost {
   id: string;
   workOrderNo: string;
+  workOrderId: string;
   orderNo: string;
+  orderId: string;
   productName: string;
+  productCode: string;
   quantity: number;
   materialCost: number;
   laborCost: number;
@@ -229,6 +259,10 @@ export interface WorkOrderCost {
   revenue: number;
   profit: number;
   profitMargin: number;
+  completedMonth: string;
+  completedDate: string;
+  isCostAbnormal?: boolean;
+  costAbnormalReason?: string;
 }
 
 export interface Alert {

@@ -18,6 +18,10 @@ import type {
   ProductionStats,
   ProcessDetail,
   DefectRecord,
+  RiskLevel,
+  ScheduleDraft,
+  OrderScheduleDraft,
+  WorkOrderScheduleDraft,
 } from '@/types';
 import {
   mockUsers,
@@ -58,6 +62,7 @@ interface MESState {
   productionStats: ProductionStats[];
   sidebarCollapsed: boolean;
   autoMaintenanceTriggered: Record<string, boolean>;
+  scheduleDraft: ScheduleDraft | null;
 
   login: (userId: string) => boolean;
   logout: () => void;
@@ -72,7 +77,10 @@ interface MESState {
   completeWorkOrder: (workOrderId: string) => void;
   pauseWorkOrder: (workOrderId: string) => void;
   addCompletedQty: (workOrderId: string, qty: number, isGood: boolean) => void;
-  generateWorkOrders: (orderId: string) => { scheduled: WorkOrder[]; unscheduled: { processName: string; eqType: string; reason: string }[] };
+  generateWorkOrders: (orderId: string, previewOnly?: boolean) => { scheduled: WorkOrder[]; unscheduled: { processName: string; eqType: string; reason: string }[] };
+  generateScheduleDraft: () => ScheduleDraft;
+  applyScheduleDraft: () => { totalScheduled: number; totalUnscheduled: number; scheduledOrders: string[]; unscheduledSteps: { orderNo: string; processName: string; eqType: string; reason: string }[] };
+  clearScheduleDraft: () => void;
   scheduleAllPendingOrders: () => { totalScheduled: number; totalUnscheduled: number; scheduledOrders: string[]; unscheduledSteps: { orderNo: string; processName: string; eqType: string; reason: string }[] };
   findEquipmentFreeSlot: (equipmentId: string, hours: number, earliestStart?: number) => { start: number; end: number };
   getEquipmentLoad: (equipmentId: string, date: Date) => number;
@@ -113,8 +121,9 @@ export const useMESStore = create<MESState>((set, get) => ({
   productionStats: mockProductionStats,
   sidebarCollapsed: false,
   autoMaintenanceTriggered: {},
+  scheduleDraft: null,
 
-  login: (userId: string) => {
+  login: (userId) => {
     const user = get().users.find(u => u.id === userId);
     if (user) {
       set({ currentUser: user });
@@ -325,7 +334,7 @@ export const useMESStore = create<MESState>((set, get) => ({
     }));
   },
 
-  generateWorkOrders: (orderId) => {
+  generateWorkOrders: (orderId, previewOnly = false) => {
     const state = get();
     const order = state.orders.find(o => o.id === orderId);
     if (!order) return { scheduled: [], unscheduled: [] };
@@ -407,11 +416,27 @@ export const useMESStore = create<MESState>((set, get) => ({
       }
       if (reasons.length === 0) reasons.push('按EDD最早交期优先规则安排');
 
+      const riskReasons: string[] = [];
+      let riskLevel: RiskLevel = 'none';
+      if (best.load >= 90) {
+        riskLevel = 'medium';
+        riskReasons.push(`${best.eq.name}当天负荷${best.load.toFixed(0)}%，偏高`);
+      } else if (best.load >= 75) {
+        if (riskLevel === 'none') riskLevel = 'low';
+        riskReasons.push(`${best.eq.name}当天负荷${best.load.toFixed(0)}%，较饱和`);
+      }
+      if (best.eq.status === 'maintenance') {
+        riskLevel = 'high';
+        riskReasons.push(`${best.eq.name}处于维护状态，可能延误`);
+      }
+
       const scheduleReason = reasons.join('；');
 
       scheduled.push({
-        id: `wo${Date.now()}${Math.random().toString(36).slice(2, 6)}-${idx}`,
-        workOrderNo: `WO${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
+        id: previewOnly ? `draft-${orderId}-${idx}` : `wo${Date.now()}${Math.random().toString(36).slice(2, 6)}-${idx}`,
+        workOrderNo: previewOnly
+          ? `WO-DRAFT-${order.orderNo.slice(-6)}-${idx + 1}`
+          : `WO${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
         orderId: order.id,
         orderNo: order.orderNo,
         productName: order.productName,
@@ -428,44 +453,185 @@ export const useMESStore = create<MESState>((set, get) => ({
         priority: isUrgent ? 'high' : order.quantity > 30 ? 'medium' : 'low',
         scheduleReason,
         processName: step.processName,
+        riskLevel,
+        riskReasons,
       });
     });
 
-    set(state => ({
-      workOrders: [...scheduled, ...state.workOrders],
-      orders: state.orders.map(o =>
-        o.id === orderId ? { ...o, status: 'scheduled' } : o
-      ),
-    }));
+    if (scheduled.length > 0) {
+      const lastStep = scheduled[scheduled.length - 1];
+      const estimatedFinish = new Date(lastStep.planEndTime).getTime();
+      const delivery = new Date(order.deliveryDate).getTime();
+      const daysLate = (estimatedFinish - delivery) / (24 * 3600 * 1000);
+
+      let deliveryRisk: RiskLevel = 'none';
+      const deliveryReasons: string[] = [];
+      if (daysLate > 1) {
+        deliveryRisk = 'critical';
+        deliveryReasons.push(`预计晚交 ${daysLate.toFixed(1)} 天，严重延误`);
+      } else if (daysLate > 0) {
+        deliveryRisk = 'high';
+        deliveryReasons.push(`预计晚交 ${(daysLate * 24).toFixed(0)} 小时`);
+      } else if (daysLate > -0.5) {
+        deliveryRisk = 'medium';
+        deliveryReasons.push('交期紧张，缓冲时间不足半天');
+      } else if (daysLate > -1) {
+        deliveryRisk = 'low';
+        deliveryReasons.push('交期较紧，建议关注生产进度');
+      }
+
+      if (deliveryRisk !== 'none') {
+        scheduled.forEach(wo => {
+          const currentLevel = wo.riskLevel || 'none';
+          const levelOrder = ['none', 'low', 'medium', 'high', 'critical'];
+          if (levelOrder.indexOf(deliveryRisk) > levelOrder.indexOf(currentLevel)) {
+            wo.riskLevel = deliveryRisk;
+          }
+          wo.riskReasons = [...(wo.riskReasons || []), ...deliveryReasons];
+        });
+      }
+    }
+
+    if (!previewOnly) {
+      set(state => ({
+        workOrders: [...scheduled, ...state.workOrders],
+        orders: state.orders.map(o =>
+          o.id === orderId ? { ...o, status: 'scheduled' } : o
+        ),
+      }));
+    }
 
     return { scheduled, unscheduled };
   },
 
-  scheduleAllPendingOrders: () => {
+  generateScheduleDraft: () => {
     const state = get();
     const pendingOrders = state.orders
       .filter(o => o.status === 'pending')
       .sort((a, b) => new Date(a.deliveryDate).getTime() - new Date(b.deliveryDate).getTime());
 
+    const orderDrafts: OrderScheduleDraft[] = [];
     let totalScheduled = 0;
+    let totalUnscheduled = 0;
+    let highRiskCount = 0;
+
+    pendingOrders.forEach(order => {
+      const result = get().generateWorkOrders(order.id, true);
+
+      let overallRisk: RiskLevel = 'none';
+      const overallRiskReasons: string[] = [];
+      const levelOrder: RiskLevel[] = ['none', 'low', 'medium', 'high', 'critical'];
+
+      result.scheduled.forEach(wo => {
+        const rl = wo.riskLevel || 'none';
+        if (levelOrder.indexOf(rl) > levelOrder.indexOf(overallRisk)) {
+          overallRisk = rl;
+        }
+        if (wo.riskReasons) {
+          wo.riskReasons.forEach(r => {
+            if (!overallRiskReasons.includes(r)) overallRiskReasons.push(r);
+          });
+        }
+      });
+      result.unscheduled.forEach(() => {
+        if (levelOrder.indexOf('high') > levelOrder.indexOf(overallRisk)) {
+          overallRisk = 'high';
+        }
+        if (!overallRiskReasons.includes('存在未排程工序')) {
+          overallRiskReasons.push('存在未排程工序');
+        }
+      });
+
+      if ((overallRisk as RiskLevel) === 'high' || (overallRisk as RiskLevel) === 'critical') {
+        highRiskCount++;
+      }
+
+      const estimatedDeliveryTime = result.scheduled.length > 0
+        ? result.scheduled[result.scheduled.length - 1].planEndTime
+        : '-';
+
+      const onTime = result.scheduled.length > 0 &&
+        new Date(estimatedDeliveryTime).getTime() <= new Date(order.deliveryDate).getTime();
+
+      orderDrafts.push({
+        orderId: order.id,
+        orderNo: order.orderNo,
+        productName: order.productName,
+        deliveryDate: order.deliveryDate,
+        riskLevel: overallRisk,
+        riskReasons: overallRiskReasons,
+        scheduledSteps: result.scheduled.map(wo => ({
+          workOrder: { ...wo },
+          reasons: wo.scheduleReason ? wo.scheduleReason.split('；') : [],
+          riskLevel: wo.riskLevel || 'none',
+          riskReasons: wo.riskReasons || [],
+        })),
+        unscheduledSteps: result.unscheduled,
+        estimatedDeliveryTime,
+        onTime,
+      });
+
+      totalScheduled += result.scheduled.length;
+      totalUnscheduled += result.unscheduled.length;
+    });
+
+    const draft: ScheduleDraft = {
+      orderDrafts,
+      totalScheduled,
+      totalUnscheduled,
+      highRiskCount,
+      generatedAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
+    };
+
+    set({ scheduleDraft: draft });
+    return draft;
+  },
+
+  applyScheduleDraft: () => {
+    const draft = get().scheduleDraft;
+    if (!draft) return { totalScheduled: 0, totalUnscheduled: 0, scheduledOrders: [], unscheduledSteps: [] };
+
+    const newWorkOrders: WorkOrder[] = [];
     const scheduledOrders: string[] = [];
     const unscheduledSteps: { orderNo: string; processName: string; eqType: string; reason: string }[] = [];
 
-    pendingOrders.forEach(o => {
-      const result = get().generateWorkOrders(o.id);
-      totalScheduled += result.scheduled.length;
-      if (result.scheduled.length > 0) scheduledOrders.push(o.orderNo);
-      result.unscheduled.forEach(u => {
-        unscheduledSteps.push({ orderNo: o.orderNo, ...u });
+    draft.orderDrafts.forEach(od => {
+      od.scheduledSteps.forEach((step, idx) => {
+        const wo: WorkOrder = {
+          ...step.workOrder,
+          id: `wo${Date.now()}${Math.random().toString(36).slice(2, 6)}-${idx}-${od.orderNo.slice(-4)}`,
+          workOrderNo: `WO${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
+        };
+        newWorkOrders.push(wo);
+      });
+      if (od.scheduledSteps.length > 0) scheduledOrders.push(od.orderNo);
+      od.unscheduledSteps.forEach(u => {
+        unscheduledSteps.push({ orderNo: od.orderNo, ...u });
       });
     });
 
+    set(state => ({
+      workOrders: [...newWorkOrders, ...state.workOrders],
+      orders: state.orders.map(o =>
+        scheduledOrders.includes(o.orderNo) ? { ...o, status: 'scheduled' } : o
+      ),
+      scheduleDraft: null,
+    }));
+
     return {
-      totalScheduled,
+      totalScheduled: newWorkOrders.length,
       totalUnscheduled: unscheduledSteps.length,
       scheduledOrders,
       unscheduledSteps,
     };
+  },
+
+  clearScheduleDraft: () => {
+    set({ scheduleDraft: null });
+  },
+
+  scheduleAllPendingOrders: () => {
+    return get().applyScheduleDraft();
   },
 
   getEquipmentData: (equipmentId) => {
@@ -711,11 +877,22 @@ export const useMESStore = create<MESState>((set, get) => ({
     const profit = revenue - totalCost;
     const profitMargin = Math.round((profit / revenue) * 1000) / 10;
 
+    const completedDate = wo.endTime || new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const completedMonth = completedDate.slice(0, 7);
+
+    const isCostAbnormal = profitMargin < 15 || profitMargin > 45;
+    let costAbnormalReason: string | undefined;
+    if (profitMargin < 15) costAbnormalReason = '利润率低于15%，成本偏高';
+    else if (profitMargin > 45) costAbnormalReason = '利润率高于45%，需复核';
+
     return {
       id: '',
+      workOrderId: wo.id,
       workOrderNo: wo.workOrderNo,
+      orderId: wo.orderId,
       orderNo: wo.orderNo,
       productName: wo.productName,
+      productCode: wo.productCode,
       quantity,
       materialCost: Math.round(materialCost),
       laborCost,
@@ -726,6 +903,10 @@ export const useMESStore = create<MESState>((set, get) => ({
       revenue,
       profit,
       profitMargin,
+      completedDate,
+      completedMonth,
+      isCostAbnormal,
+      costAbnormalReason,
     };
   },
 }));
