@@ -436,14 +436,14 @@ export default function Dashboard() {
   }));
 
   const modalTitles: Record<string, string> = {
-    oee: '设备综合效率（OEE）- 工序明细',
-    achievement: '产量达成率 - 工序明细',
-    quality: '产品合格率与不良率（含异常工序） - 工序明细',
+    oee: '设备综合效率（OEE） - 低OEE/异常工序优先',
+    achievement: '产量达成率 - 进度落后工序优先',
+    quality: '产品合格率与不良率 - 含异常/不良品工序',
     workorders: '今日生产工单 - 工序明细',
   };
   const modalFilterTypes: Record<string, string> = {
-    oee: '',
-    achievement: '',
+    oee: 'oee',
+    achievement: 'achievement',
     quality: 'defect',
     workorders: 'today',
   };

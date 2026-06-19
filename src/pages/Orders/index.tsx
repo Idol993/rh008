@@ -363,15 +363,27 @@ export default function Orders() {
   };
 
   const handleScheduleOrder = (order: Order) => {
-    const newWOs = generateWorkOrders(order.id);
-    addAlert({
-      type: 'equipment',
-      level: 'info',
-      title: `订单 ${order.orderNo} 已排程`,
-      message: `生成 ${newWOs.length} 个生产工单`,
-      timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      relatedId: order.id,
-    });
+    const result = generateWorkOrders(order.id);
+    if (result.scheduled.length > 0) {
+      addAlert({
+        type: 'equipment',
+        level: 'info',
+        title: `订单 ${order.orderNo} 排程完成`,
+        message: `成功排程 ${result.scheduled.length} 道工序${result.unscheduled.length > 0 ? `，${result.unscheduled.length} 道未排` : ''}`,
+        timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        relatedId: order.id,
+      });
+    }
+    if (result.unscheduled.length > 0) {
+      addAlert({
+        type: 'equipment',
+        level: 'warning',
+        title: `订单 ${order.orderNo} 存在未排工序`,
+        message: result.unscheduled.map(u => `${u.processName}: ${u.reason}`).join('；'),
+        timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        relatedId: order.id,
+      });
+    }
     setSelectedOrder(null);
   };
 

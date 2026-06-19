@@ -92,6 +92,21 @@ export interface WorkOrder {
   planEndTime: string;
   status: 'pending' | 'running' | 'paused' | 'completed' | 'abnormal';
   priority: 'high' | 'medium' | 'low';
+  scheduleReason?: string;
+  processName?: string;
+}
+
+export interface ScheduleResult {
+  workOrder: WorkOrder;
+  reasons: string[];
+}
+
+export interface UnscheduledStep {
+  orderId: string;
+  orderNo: string;
+  processName: string;
+  eqType: string;
+  reason: string;
 }
 
 export interface MaintenanceOrder {
